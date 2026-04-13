@@ -803,10 +803,11 @@ function initMap() {
     attributionControl: false
   });
 
-  // Terrain layer (Stadia Stamen Terrain)
-  terrainLayer = L.tileLayer('https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.png', {
-    maxZoom: 18,
-    attribution: '© Stadia Maps © Stamen Design © OpenMapTiles © OpenStreetMap'
+  // Terrain layer — OpenTopoMap (free, no API key, shows trails and elevation)
+  terrainLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+    maxZoom: 17,
+    subdomains: ['a','b','c'],
+    attribution: '© OpenTopoMap © OpenStreetMap'
   });
 
   // Satellite layer (ESRI World Imagery)
@@ -1037,6 +1038,8 @@ Return ONLY the JSON object as specified.`;
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-api-key': CLAUDE_KEY,
+          'anthropic-version': '2023-06-01',
           'anthropic-dangerous-direct-browser-access': 'true'
         },
         body: JSON.stringify({
