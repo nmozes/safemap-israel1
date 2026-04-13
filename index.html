@@ -803,11 +803,10 @@ function initMap() {
     attributionControl: false
   });
 
-  // Terrain layer — OpenTopoMap (free, no API key, shows trails and elevation)
-  terrainLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-    maxZoom: 17,
-    subdomains: ['a','b','c'],
-    attribution: '© OpenTopoMap © OpenStreetMap'
+  // Terrain: ESRI World Topo (free, no key, shows trails + elevation, reliable CORS)
+  terrainLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 18,
+    attribution: '© Esri © OpenStreetMap contributors'
   });
 
   // Satellite layer (ESRI World Imagery)
@@ -1040,7 +1039,8 @@ Return ONLY the JSON object as specified.`;
           'Content-Type': 'application/json',
           'x-api-key': CLAUDE_KEY,
           'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
+          'anthropic-dangerous-direct-browser-access': 'true',
+          'Authorization': 'Bearer ' + CLAUDE_KEY
         },
         body: JSON.stringify({
           model: MODEL,
