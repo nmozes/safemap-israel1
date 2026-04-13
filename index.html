@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>SafeMap Israel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --stone-50:  #fafaf9;
+    --stone-100: #f5f5f4;
+    --stone-200: #e7e5e4;
+    --stone-300: #d6d3d1;
+    --stone-400: #a8a29e;
+    --stone-500: #78716c;
+    --stone-600: #57534e;
+    --stone-700: #44403c;
+    --stone-800: #292524;
+    --stone-900: #1c1917;
+
+    --safe-fill:    rgba(74, 158, 100, 0.22);
+    --safe-border:  rgba(52, 130, 76, 0.55);
+    --safe-ui:      #2d7a4f;
+    --safe-light:   #e8f5ec;
+
+    --nogo-fill:    rgba(200, 70, 60, 0.18);
+    --nogo-border:  rgba(180, 50, 40, 0.5);
+    --nogo-ui:      #b83232;
+    --nogo-light:   #fdecea;
+
+    --neutral-fill:   rgba(160, 150, 140, 0.08);
+    --neutral-border: rgba(140, 130, 120, 0.3);
+    --neutral-ui:     #78716c;
+
+    --panel-bg:   rgba(250, 250, 249, 0.97);
+    --panel-w:    320px;
+    --radius:     14px;
+    --shadow:     0 4px 24px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06);
+    --shadow-lg:  0 8px 40px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.08);
+
+    --font:       'DM Sans', sans-serif;
+    --font-mono:  'DM Mono', monospace;
+
+    --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    font-family: var(--font);
+    background: var(--stone-100);
+    color: var(--stone-800);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ─── Map ─────────────────────────────────────── */
+  #map {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+  }
+
+  /* Leaflet overrides */
+  .leaflet-control-zoom {
+    border: none !important;
+    box-shadow: var(--shadow) !important;
+    border-radius: 10px !important;
+    overflow: hidden;
+  }
+  .leaflet-control-zoom a {
+    background: var(--panel-bg) !important;
+    color: var(--stone-600) !important;
+    border: none !important;
+    font-size: 16px !important;
+    line-height: 30px !important;
+    width: 34px !important;
+    height: 34px !important;
+  }
+  .leaflet-control-zoom a:hover { background: var(--stone-100) !important; }
+  .leaflet-control-attribution { display: none; }
+
+  /* ─── Top bar ─────────────────────────────────── */
+  .topbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 56px;
+    padding: 0 16px;
+    padding-top: env(safe-area-inset-top);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 900;
+    background: var(--panel-bg);
+    border-bottom: 1px solid var(--stone-200);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .menu-btn {
+    width: 36px; height: 36px;
+    border-radius: 9px;
+    border: 1.5px solid var(--stone-200);
+    background: white;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    flex-shrink: 0;
+    transition: all var(--transition);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+  }
+  .menu-btn:active { transform: scale(0.93); }
+  .menu-btn span {
+    display: block;
+    width: 16px; height: 1.5px;
+    background: var(--stone-600);
+    border-radius: 2px;
+    transition: all var(--transition);
+  }
+  .menu-btn.open span:nth-child(1) { transform: translateY(6.5px) rotate(45deg); }
+  .menu-btn.open span:nth-child(2) { opacity: 0; transform: scaleX(0); }
+  .menu-btn.open span:nth-child(3) { transform: translateY(-6.5px) rotate(-45deg); }
+
+  .topbar-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--stone-800);
+    letter-spacing: -0.2px;
+    flex: 1;
+  }
+  .topbar-title span {
+    font-weight: 300;
+    color: var(--stone-400);
+  }
+
+  /* Status pill */
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: white;
+    border: 1.5px solid var(--stone-200);
+    border-radius: 20px;
+    padding: 4px 10px 4px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--stone-500);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    cursor: default;
+    white-space: nowrap;
+  }
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--stone-300);
+    flex-shrink: 0;
+    transition: background 0.4s;
+  }
+  .status-dot.live { background: #22c55e; box-shadow: 0 0 0 2px rgba(34,197,94,0.2); animation: pulse-dot 2s ease-in-out infinite; }
+  .status-dot.loading { background: #f59e0b; box-shadow: 0 0 0 2px rgba(245,158,11,0.2); animation: pulse-dot 1s ease-in-out infinite; }
+  .status-dot.error { background: var(--nogo-ui); }
+  @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+  /* Satellite toggle */
+  .sat-toggle {
+    width: 36px; height: 36px;
+    border-radius: 9px;
+    border: 1.5px solid var(--stone-200);
+    background: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+    transition: all var(--transition);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+  }
+  .sat-toggle:active { transform: scale(0.93); }
+  .sat-toggle.on { background: var(--stone-800); border-color: var(--stone-700); }
+
+  /* ─── Slide-out Panel ──────────────────────────── */
+  .panel-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(28, 25, 23, 0.35);
+    z-index: 950;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--transition);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+  }
+  .panel-overlay.open { opacity: 1; pointer-events: all; }
+
+  .panel {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: min(var(--panel-w), 88vw);
+    background: var(--panel-bg);
+    z-index: 960;
+    transform: translateX(-100%);
+    transition: transform var(--transition);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
+  }
+  .panel.open { transform: translateX(0); }
+
+  .panel-header {
+    padding: 20px 20px 16px;
+    padding-top: max(20px, env(safe-area-inset-top));
+    border-bottom: 1px solid var(--stone-200);
+    flex-shrink: 0;
+  }
+  .panel-logo {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--stone-400);
+    font-family: var(--font-mono);
+    margin-bottom: 6px;
+  }
+  .panel-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--stone-800);
+    letter-spacing: -0.4px;
+  }
+
+  .panel-body {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* Last updated */
+  .updated-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: var(--stone-400);
+    font-family: var(--font-mono);
+  }
+  .updated-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--stone-300);
+    flex-shrink: 0;
+  }
+  .updated-dot.live { background: #22c55e; }
+
+  /* Section header */
+  .section-head {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--stone-400);
+    margin-bottom: 10px;
+    font-family: var(--font-mono);
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 9px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .legend-item:active { transform: scale(0.97); }
+  .legend-item.safe   { background: var(--safe-light); border-color: rgba(52,130,76,0.2); }
+  .legend-item.nogo   { background: var(--nogo-light); border-color: rgba(180,50,40,0.15); }
+  .legend-item.neutral { background: var(--stone-100); border-color: var(--stone-200); }
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .legend-dot.safe    { background: var(--safe-ui); }
+  .legend-dot.nogo    { background: var(--nogo-ui); }
+  .legend-dot.neutral { background: var(--neutral-ui); }
+  .legend-label { font-size: 13px; font-weight: 500; flex: 1; }
+  .legend-count {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--stone-400);
+  }
+
+  /* Briefing */
+  .briefing-box {
+    background: var(--stone-100);
+    border: 1px solid var(--stone-200);
+    border-radius: 10px;
+    padding: 14px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--stone-600);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .briefing-box.loading {
+    color: var(--stone-400);
+    font-style: italic;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Regions list */
+  .regions-list { display: flex; flex-direction: column; gap: 6px; }
+  .region-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .region-row:active { transform: scale(0.97); }
+  .region-row.safe    { background: var(--safe-light); color: var(--safe-ui); }
+  .region-row.nogo    { background: var(--nogo-light); color: var(--nogo-ui); }
+  .region-row.neutral { background: var(--stone-100); color: var(--stone-600); }
+  .region-row .r-dot  { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .region-row.safe .r-dot    { background: var(--safe-ui); }
+  .region-row.nogo .r-dot    { background: var(--nogo-ui); }
+  .region-row.neutral .r-dot { background: var(--stone-400); }
+  .region-name { flex: 1; }
+  .region-alerts { font-size: 10px; font-family: var(--font-mono); opacity: 0.7; }
+
+  /* Refresh btn */
+  .refresh-btn {
+    background: var(--stone-800);
+    border: none;
+    border-radius: 10px;
+    color: white;
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 13px;
+    cursor: pointer;
+    width: 100%;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    margin-bottom: env(safe-area-inset-bottom);
+  }
+  .refresh-btn:active { background: var(--stone-700); transform: scale(0.98); }
+  .refresh-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ─── Popup ────────────────────────────────────── */
+  .leaflet-popup-content-wrapper {
+    border-radius: 12px !important;
+    box-shadow: var(--shadow-lg) !important;
+    border: 1px solid var(--stone-200) !important;
+    padding: 0 !important;
+    overflow: hidden;
+    font-family: var(--font) !important;
+  }
+  .leaflet-popup-content { margin: 0 !important; min-width: 200px; }
+  .leaflet-popup-tip-container { display: none; }
+  .leaflet-popup-close-button {
+    color: var(--stone-400) !important;
+    font-size: 18px !important;
+    top: 8px !important; right: 10px !important;
+  }
+
+  .popup-inner { padding: 16px; }
+  .popup-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 20px;
+    margin-bottom: 8px;
+    font-family: var(--font-mono);
+  }
+  .popup-badge.safe    { background: var(--safe-light); color: var(--safe-ui); }
+  .popup-badge.nogo    { background: var(--nogo-light); color: var(--nogo-ui); }
+  .popup-badge.neutral { background: var(--stone-100); color: var(--stone-500); }
+  .popup-name { font-size: 15px; font-weight: 600; color: var(--stone-800); margin-bottom: 6px; }
+  .popup-reason { font-size: 12px; color: var(--stone-500); line-height: 1.55; }
+  .popup-alerts {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--stone-200);
+    font-size: 11px;
+    color: var(--stone-400);
+    font-family: var(--font-mono);
+  }
+
+  /* ─── Loading overlay ──────────────────────────── */
+  #loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--stone-50);
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    transition: opacity 0.5s;
+  }
+  #loading-overlay.hidden { opacity: 0; pointer-events: none; }
+  .load-icon { font-size: 36px; animation: float 2s ease-in-out infinite; }
+  @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+  .load-title { font-size: 18px; font-weight: 600; color: var(--stone-800); letter-spacing: -0.3px; }
+  .load-sub { font-size: 13px; color: var(--stone-400); }
+  .load-bar-wrap { width: 160px; height: 3px; background: var(--stone-200); border-radius: 2px; overflow: hidden; }
+  .load-bar { height: 100%; background: var(--stone-600); border-radius: 2px; width: 0%; transition: width 0.4s; }
+
+  /* Spinner inline */
+  .spin { display: inline-block; animation: spin360 0.7s linear infinite; }
+  @keyframes spin360 { to { transform: rotate(360deg); } }
+
+  /* scrollbar */
+  .panel-body::-webkit-scrollbar { width: 3px; }
+  .panel-body::-webkit-scrollbar-thumb { background: var(--stone-200); border-radius: 2px; }
+
+  /* ─── Login gate ──────────────────────────────── */
+  #login-gate {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: var(--stone-50);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 24px;
+    gap: 0;
+  }
+  #login-gate.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+  }
+
+  .login-icon {
+    font-size: 40px;
+    margin-bottom: 20px;
+    animation: float 3s ease-in-out infinite;
+  }
+  .login-wordmark {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--stone-400);
+    font-family: var(--font-mono);
+    margin-bottom: 8px;
+  }
+  .login-title {
+    font-size: 26px;
+    font-weight: 600;
+    color: var(--stone-800);
+    letter-spacing: -0.5px;
+    margin-bottom: 6px;
+    text-align: center;
+  }
+  .login-sub {
+    font-size: 14px;
+    color: var(--stone-400);
+    margin-bottom: 40px;
+    text-align: center;
+    line-height: 1.5;
+  }
+
+  .login-box {
+    width: 100%;
+    max-width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .login-input-wrap {
+    position: relative;
+    width: 100%;
+  }
+  .login-input-wrap .lock-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 15px;
+    pointer-events: none;
+    opacity: 0.4;
+  }
+  #login-input {
+    width: 100%;
+    background: white;
+    border: 1.5px solid var(--stone-200);
+    border-radius: 12px;
+    color: var(--stone-800);
+    font-family: var(--font);
+    font-size: 15px;
+    padding: 14px 14px 14px 42px;
+    outline: none;
+    transition: border-color 0.2s;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    -webkit-appearance: none;
+  }
+  #login-input:focus { border-color: var(--stone-400); }
+  #login-input.error {
+    border-color: var(--nogo-ui);
+    animation: shake 0.35s ease;
+  }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    20%      { transform: translateX(-8px); }
+    40%      { transform: translateX(8px); }
+    60%      { transform: translateX(-5px); }
+    80%      { transform: translateX(5px); }
+  }
+
+  .login-btn {
+    background: var(--stone-800);
+    border: none;
+    border-radius: 12px;
+    color: white;
+    font-family: var(--font);
+    font-size: 15px;
+    font-weight: 500;
+    padding: 14px;
+    cursor: pointer;
+    width: 100%;
+    transition: all 0.15s;
+    letter-spacing: 0.2px;
+  }
+  .login-btn:active { background: var(--stone-700); transform: scale(0.98); }
+
+  .login-error {
+    font-size: 12px;
+    color: var(--nogo-ui);
+    text-align: center;
+    min-height: 18px;
+    font-family: var(--font-mono);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .login-error.show { opacity: 1; }
+
+  .login-footer {
+    margin-top: 48px;
+    font-size: 11px;
+    color: var(--stone-300);
+    text-align: center;
+    font-family: var(--font-mono);
+    letter-spacing: 0.5px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Login gate -->
+<div id="login-gate">
+  <div class="login-icon">🗺️</div>
+  <div class="login-wordmark">IL-OPS · SafeMap</div>
+  <div class="login-title">SafeMap Israel</div>
+  <div class="login-sub">Real-time safety intelligence.<br>Restricted access.</div>
+  <div class="login-box">
+    <div class="login-input-wrap">
+      <span class="lock-icon">🔑</span>
+      <input
+        id="login-input"
+        type="password"
+        placeholder="Access key"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
+        onkeydown="if(event.key==='Enter') attemptLogin()"
+      >
+    </div>
+    <button class="login-btn" onclick="attemptLogin()">Enter</button>
+    <div class="login-error" id="login-error">Incorrect access key</div>
+  </div>
+  <div class="login-footer">PRIVATE · AUTHORISED ACCESS ONLY</div>
+</div>
+
+<!-- Loading overlay -->
+<div id="loading-overlay">
+  <div class="load-icon">🗺️</div>
+  <div class="load-title">SafeMap Israel</div>
+  <div class="load-sub" id="load-sub">Initializing map…</div>
+  <div class="load-bar-wrap"><div class="load-bar" id="load-bar"></div></div>
+</div>
+
+<!-- Map -->
+<div id="map"></div>
+
+<!-- Top bar -->
+<div class="topbar">
+  <button class="menu-btn" id="menu-btn" onclick="togglePanel()" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
+  <div class="topbar-title">SafeMap <span>Israel</span></div>
+  <div class="status-pill">
+    <div class="status-dot" id="status-dot"></div>
+    <span id="status-text">Loading…</span>
+  </div>
+  <button class="sat-toggle" id="sat-toggle" onclick="toggleSatellite()" title="Toggle satellite view">🛰️</button>
+</div>
+
+<!-- Panel overlay -->
+<div class="panel-overlay" id="panel-overlay" onclick="closePanel()"></div>
+
+<!-- Slide panel -->
+<div class="panel" id="panel">
+  <div class="panel-header">
+    <div class="panel-logo">IL-OPS · SafeMap</div>
+    <div class="panel-title">Safety Briefing</div>
+  </div>
+  <div class="panel-body">
+
+    <div>
+      <div class="updated-row">
+        <div class="updated-dot" id="updated-dot"></div>
+        <span id="updated-text">Not yet loaded</span>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div>
+      <div class="section-head">Map Legend</div>
+      <div class="legend">
+        <div class="legend-item safe" onclick="highlightClass('safe')">
+          <div class="legend-dot safe"></div>
+          <div class="legend-label">Safer Zones</div>
+          <div class="legend-count" id="count-safe">—</div>
+        </div>
+        <div class="legend-item neutral" onclick="highlightClass('neutral')">
+          <div class="legend-dot neutral"></div>
+          <div class="legend-label">Neutral</div>
+          <div class="legend-count" id="count-neutral">—</div>
+        </div>
+        <div class="legend-item nogo" onclick="highlightClass('nogo')">
+          <div class="legend-dot nogo"></div>
+          <div class="legend-label">No-Go Zones</div>
+          <div class="legend-count" id="count-nogo">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Briefing -->
+    <div>
+      <div class="section-head">AI Briefing</div>
+      <div class="briefing-box loading" id="briefing-box">
+        <span class="spin">⟳</span> Searching live alert data…
+      </div>
+    </div>
+
+    <!-- Regions -->
+    <div>
+      <div class="section-head">Regions</div>
+      <div class="regions-list" id="regions-list">
+        <!-- populated by JS -->
+      </div>
+    </div>
+
+    <button class="refresh-btn" id="refresh-btn" onclick="runBriefing()">
+      <span>↺</span> Refresh Briefing
+    </button>
+  </div>
+</div>
+
+<script>
+// ─── API ───────────────────────────────────────────────────────────────────
+const CLAUDE_KEY = "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";
+const MODEL      = "claude-sonnet-4-20250514";
+
+// ─── Region definitions ────────────────────────────────────────────────────
+// Each region: { id, name, nameHe, polygon: [[lat,lng],...], class, alerts, reason }
+const REGIONS = [
+  {
+    id: 'upper_galil',
+    name: 'Upper Galilee',
+    nameHe: 'גליל עליון',
+    polygon: [[33.27,35.15],[33.27,35.70],[33.10,35.85],[32.92,35.75],[32.90,35.50],[33.05,35.28]],
+  },
+  {
+    id: 'lower_galil',
+    name: 'Lower Galilee & Valleys',
+    nameHe: 'גליל תחתון',
+    polygon: [[32.92,35.75],[32.92,35.28],[32.68,35.18],[32.55,35.25],[32.55,35.65],[32.68,35.78]],
+  },
+  {
+    id: 'golan',
+    name: 'Golan Heights',
+    nameHe: 'רמת הגולן',
+    polygon: [[33.27,35.70],[33.27,36.10],[32.98,36.10],[32.72,36.00],[32.72,35.75],[32.92,35.75]],
+  },
+  {
+    id: 'haifa_coast',
+    name: 'Haifa & Carmel Coast',
+    nameHe: 'חיפה והכרמל',
+    polygon: [[32.95,34.95],[32.95,35.28],[32.68,35.18],[32.55,35.25],[32.42,35.00],[32.42,34.88],[32.68,34.92]],
+  },
+  {
+    id: 'sharon_center',
+    name: 'Sharon & Center',
+    nameHe: 'השרון והמרכז',
+    polygon: [[32.42,34.88],[32.42,35.00],[32.10,35.10],[31.90,35.08],[31.90,34.75],[32.10,34.70],[32.30,34.78]],
+  },
+  {
+    id: 'tel_aviv',
+    name: 'Tel Aviv & Gush Dan',
+    nameHe: 'תל אביב וגוש דן',
+    polygon: [[32.30,34.78],[32.10,34.70],[31.90,34.75],[31.90,34.92],[32.10,35.00],[32.20,34.95]],
+  },
+  {
+    id: 'jerusalem',
+    name: 'Jerusalem Hills',
+    nameHe: 'הרי ירושלים',
+    polygon: [[31.90,35.08],[32.10,35.10],[32.10,35.40],[31.90,35.40],[31.70,35.22],[31.70,35.08]],
+  },
+  {
+    id: 'dead_sea_arava',
+    name: 'Dead Sea & Arava',
+    nameHe: 'ים המלח והערבה',
+    polygon: [[31.90,35.40],[32.10,35.40],[32.10,35.65],[31.55,35.65],[31.10,35.45],[31.10,35.25],[31.55,35.40]],
+  },
+  {
+    id: 'negev_north',
+    name: 'Northern Negev',
+    nameHe: 'נגב צפוני',
+    polygon: [[31.70,34.60],[31.70,35.08],[31.55,35.40],[31.10,35.25],[31.00,34.70],[31.20,34.50],[31.50,34.48]],
+  },
+  {
+    id: 'negev_south',
+    name: 'Southern Negev',
+    nameHe: 'נגב דרומי',
+    polygon: [[31.00,34.70],[31.10,35.25],[30.60,35.00],[30.10,35.00],[29.85,34.90],[29.55,34.95],[29.55,34.60],[30.00,34.45],[30.60,34.50]],
+  },
+  {
+    id: 'eilat',
+    name: 'Eilat & Red Sea Coast',
+    nameHe: 'אילת וחוף ים סוף',
+    polygon: [[29.55,34.60],[29.55,34.95],[29.50,35.00],[29.30,34.95],[29.30,34.60]],
+  },
+  {
+    id: 'gaza_envelope',
+    name: 'Gaza Envelope',
+    nameHe: 'עוטף עזה',
+    polygon: [[31.70,34.38],[31.70,34.60],[31.50,34.48],[31.20,34.50],[31.20,34.30],[31.40,34.22],[31.60,34.25]],
+  },
+  {
+    id: 'ashkelon_ashdod',
+    name: 'Ashkelon & Ashdod',
+    nameHe: 'אשקלון ואשדוד',
+    polygon: [[31.90,34.55],[31.90,34.75],[31.70,34.60],[31.70,34.38],[31.80,34.38],[31.88,34.50]],
+  },
+];
+
+// ─── State ─────────────────────────────────────────────────────────────────
+let map, terrainLayer, satelliteLayer, satOn = false;
+let regionLayers = {};
+let briefingData = null;
+let panelOpen = false;
+let isBriefing = false;
+
+// ─── Map init ───────────────────────────────────────────────────────────────
+function initMap() {
+  map = L.map('map', {
+    center: [31.5, 35.0],
+    zoom: 8,
+    zoomControl: false,
+    attributionControl: false
+  });
+
+  // Terrain layer (Stadia Stamen Terrain)
+  terrainLayer = L.tileLayer('https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.png', {
+    maxZoom: 18,
+    attribution: '© Stadia Maps © Stamen Design © OpenMapTiles © OpenStreetMap'
+  });
+
+  // Satellite layer (ESRI World Imagery)
+  satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 18,
+    attribution: '© Esri'
+  });
+
+  terrainLayer.addTo(map);
+
+  // Zoom control bottom-right
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+  // Draw neutral placeholder polygons
+  drawRegions(null);
+}
+
+// ─── Draw / redraw region polygons ─────────────────────────────────────────
+function getStyle(cls) {
+  if (cls === 'safe')    return { color: var_css('--safe-border'), fillColor: var_css('--safe-fill'), fillOpacity: 1, weight: 1.5, opacity: 1 };
+  if (cls === 'nogo')    return { color: var_css('--nogo-border'), fillColor: var_css('--nogo-fill'), fillOpacity: 1, weight: 1.5, opacity: 1 };
+  return { color: 'rgba(140,130,120,0.3)', fillColor: 'rgba(160,150,140,0.06)', fillOpacity: 1, weight: 1, opacity: 0.6 };
+}
+
+function var_css(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+// Parse CSS rgba strings for Leaflet
+function cssToLeaflet(name) {
+  const v = var_css(name);
+  return v;
+}
+
+const STYLE = {
+  safe:    { color: 'rgba(52,130,76,0.55)',   fillColor: 'rgba(74,158,100,0.22)', weight: 1.5, opacity: 1, fillOpacity: 1 },
+  nogo:    { color: 'rgba(180,50,40,0.5)',    fillColor: 'rgba(200,70,60,0.18)',  weight: 1.5, opacity: 1, fillOpacity: 1 },
+  neutral: { color: 'rgba(140,130,120,0.25)', fillColor: 'rgba(160,150,140,0.05)', weight: 1, opacity: 0.7, fillOpacity: 1 },
+};
+
+function drawRegions(data) {
+  // Remove old layers
+  Object.values(regionLayers).forEach(l => map.removeLayer(l));
+  regionLayers = {};
+
+  REGIONS.forEach(r => {
+    const classification = data ? (data[r.id] || { class: 'neutral', alerts: 0, reason: 'No data' }) : { class: 'neutral', alerts: 0, reason: '' };
+    r.class   = classification.class;
+    r.alerts  = classification.alerts  || 0;
+    r.reason  = classification.reason  || '';
+
+    const style = STYLE[r.class] || STYLE.neutral;
+    const poly = L.polygon(r.polygon, { ...style, interactive: true });
+
+    poly.on('click', () => showRegionPopup(r, poly));
+    poly.on('mouseover', () => { if(r.class !== 'neutral') poly.setStyle({ fillOpacity: 0.35 }); });
+    poly.on('mouseout',  () => poly.setStyle(style));
+
+    poly.addTo(map);
+    regionLayers[r.id] = poly;
+  });
+}
+
+// ─── Popup ──────────────────────────────────────────────────────────────────
+function showRegionPopup(r, poly) {
+  const center = poly.getBounds().getCenter();
+  const badgeLabel = r.class === 'safe' ? '✅ Safer Zone' : r.class === 'nogo' ? '🔴 No-Go' : '⚪ Neutral';
+  const alertsLine = r.alerts > 0
+    ? `<div class="popup-alerts">⚠ ${r.alerts} alert${r.alerts !== 1 ? 's' : ''} in window</div>`
+    : r.class === 'safe' ? '<div class="popup-alerts">✓ No alerts recorded</div>' : '';
+
+  L.popup({ closeButton: true, className: '', maxWidth: 260 })
+    .setLatLng(center)
+    .setContent(`
+      <div class="popup-inner">
+        <div class="popup-badge ${r.class}">${badgeLabel}</div>
+        <div class="popup-name">${r.name}</div>
+        <div style="font-size:11px;color:#a8a29e;margin-bottom:6px">${r.nameHe}</div>
+        <div class="popup-reason">${r.reason || 'Tap a region to see its safety status.'}</div>
+        ${alertsLine}
+      </div>`)
+    .openOn(map);
+}
+
+// ─── Panel ──────────────────────────────────────────────────────────────────
+function togglePanel() {
+  panelOpen ? closePanel() : openPanel();
+}
+function openPanel() {
+  panelOpen = true;
+  document.getElementById('panel').classList.add('open');
+  document.getElementById('panel-overlay').classList.add('open');
+  document.getElementById('menu-btn').classList.add('open');
+}
+function closePanel() {
+  panelOpen = false;
+  document.getElementById('panel').classList.remove('open');
+  document.getElementById('panel-overlay').classList.remove('open');
+  document.getElementById('menu-btn').classList.remove('open');
+}
+
+// ─── Satellite toggle ────────────────────────────────────────────────────────
+function toggleSatellite() {
+  satOn = !satOn;
+  const btn = document.getElementById('sat-toggle');
+  if (satOn) {
+    map.removeLayer(terrainLayer);
+    satelliteLayer.addTo(map);
+    satelliteLayer.bringToBack();
+    // Repaint polygons with higher opacity on satellite
+    btn.classList.add('on');
+  } else {
+    map.removeLayer(satelliteLayer);
+    terrainLayer.addTo(map);
+    terrainLayer.bringToBack();
+    btn.classList.remove('on');
+  }
+  // Keep region layers on top
+  Object.values(regionLayers).forEach(l => l.bringToFront());
+}
+
+// ─── Highlight class ─────────────────────────────────────────────────────────
+function highlightClass(cls) {
+  closePanel();
+  // Fit map to bounds of that class
+  const matching = REGIONS.filter(r => r.class === cls);
+  if (!matching.length) return;
+  const bounds = matching.map(r => regionLayers[r.id].getBounds());
+  const combined = bounds.reduce((acc, b) => acc.extend(b), L.latLngBounds(bounds[0]));
+  map.flyToBounds(combined, { padding: [40, 40], duration: 0.8 });
+}
+
+// ─── Render panel regions list ───────────────────────────────────────────────
+function renderRegionsList() {
+  const list = document.getElementById('regions-list');
+  const sorted = [...REGIONS].sort((a,b) => {
+    const order = { nogo: 0, neutral: 1, safe: 2 };
+    return order[a.class] - order[b.class];
+  });
+  list.innerHTML = sorted.map(r => `
+    <div class="region-row ${r.class}" onclick="flyToRegion('${r.id}')">
+      <div class="r-dot"></div>
+      <div class="region-name">${r.name}</div>
+      <div class="region-alerts">${r.alerts > 0 ? r.alerts + ' alerts' : r.class === 'safe' ? 'clear' : '—'}</div>
+    </div>`).join('');
+
+  // Update legend counts
+  document.getElementById('count-safe').textContent    = REGIONS.filter(r => r.class === 'safe').length + ' regions';
+  document.getElementById('count-neutral').textContent = REGIONS.filter(r => r.class === 'neutral').length + ' regions';
+  document.getElementById('count-nogo').textContent    = REGIONS.filter(r => r.class === 'nogo').length + ' regions';
+}
+
+function flyToRegion(id) {
+  closePanel();
+  const layer = regionLayers[id];
+  if (layer) {
+    map.flyToBounds(layer.getBounds(), { padding: [60, 60], duration: 0.7 });
+    const region = REGIONS.find(r => r.id === id);
+    if (region) setTimeout(() => showRegionPopup(region, layer), 700);
+  }
+}
+
+// ─── Status helpers ──────────────────────────────────────────────────────────
+function setStatus(state, text) {
+  const dot = document.getElementById('status-dot');
+  dot.className = 'status-dot ' + (state || '');
+  document.getElementById('status-text').textContent = text;
+}
+
+// ─── Main AI briefing ────────────────────────────────────────────────────────
+async function runBriefing() {
+  if (isBriefing) return;
+  isBriefing = true;
+
+  document.getElementById('refresh-btn').disabled = true;
+  document.getElementById('briefing-box').className = 'briefing-box loading';
+  document.getElementById('briefing-box').innerHTML = '<span class="spin">⟳</span> Searching live alert data…';
+  setStatus('loading', 'Updating…');
+
+  const systemPrompt = `You are a safety analyst for SafeMap Israel, a civilian safety app. Your job is to classify Israeli regions into three categories based on current Tzeva Adom (Color Red / rocket alert) data from the last 3 days.
+
+Output ONLY a valid JSON object — no prose, no markdown, no explanation.
+
+The JSON must have exactly these region IDs as keys:
+upper_galil, lower_galil, golan, haifa_coast, sharon_center, tel_aviv, jerusalem, dead_sea_arava, negev_north, negev_south, eilat, gaza_envelope, ashkelon_ashdod
+
+For each region, provide:
+{
+  "class": "safe" | "neutral" | "nogo",
+  "alerts": <integer, number of alerts in last 3 days>,
+  "reason": "<1 sentence, max 12 words, why this classification>"
+}
+
+Classification rules:
+- "nogo": active rocket alerts in last 3 days, or ongoing conflict proximity
+- "safe": zero alerts, no proximate threat, suitable for civilian recreation
+- "neutral": uncertain data, occasional alerts, or border-adjacent to active zone
+
+Be accurate based on actual current data. Gaza Envelope and active southern border areas are typically nogo. Northern tourist areas with no alerts are safe.`;
+
+  const userPrompt = `Search for current Tzeva Adom / Israeli rocket alert / Color Red alert data for the past 3 days (today is ${new Date().toLocaleDateString('en-IL', {day:'numeric',month:'long',year:'numeric'})}).
+
+Classify each of these Israeli regions based on actual alert activity:
+- Upper Galilee (Galil Elyon) — north
+- Lower Galilee & Valleys — central north  
+- Golan Heights — northeast
+- Haifa & Carmel Coast
+- Sharon & Center region
+- Tel Aviv & Gush Dan metro
+- Jerusalem Hills
+- Dead Sea & Arava valley
+- Northern Negev (Be'er Sheva area)
+- Southern Negev (Mitzpe Ramon area)
+- Eilat & Red Sea coast
+- Gaza Envelope (Sderot, kibbutz communities)
+- Ashkelon & Ashdod coast
+
+Return ONLY the JSON object as specified.`;
+
+  const messages = [{ role: 'user', content: userPrompt }];
+  let finalText = '';
+  let turns = 0;
+
+  try {
+    while (turns < 6) {
+      turns++;
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 1200,
+          system: systemPrompt,
+          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+          messages
+        })
+      });
+
+      if (!resp.ok) {
+        const e = await resp.json().catch(() => ({}));
+        throw new Error(e.error?.message || `HTTP ${resp.status}`);
+      }
+
+      const data = await resp.json();
+      const content = data.content || [];
+      const stopReason = data.stop_reason;
+
+      const textPart = content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
+      if (textPart) finalText = textPart;
+
+      if (stopReason === 'end_turn' || stopReason === 'max_tokens') break;
+
+      if (stopReason === 'tool_use') {
+        messages.push({ role: 'assistant', content });
+        const toolResults = content
+          .filter(b => b.type === 'tool_use')
+          .map(b => ({ type: 'tool_result', tool_use_id: b.id, content: 'Search completed.' }));
+        messages.push({ role: 'user', content: toolResults });
+        continue;
+      }
+      break;
+    }
+
+    // Parse JSON from response
+    const jsonMatch = finalText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No JSON in response');
+    const classData = JSON.parse(jsonMatch[0]);
+
+    // Apply classifications
+    drawRegions(classData);
+    renderRegionsList();
+
+    // Build human briefing text
+    const safeRegions  = REGIONS.filter(r => r.class === 'safe').map(r => r.name);
+    const nogoRegions  = REGIONS.filter(r => r.class === 'nogo').map(r => r.name);
+    const briefingText = buildBriefing(safeRegions, nogoRegions, classData);
+
+    document.getElementById('briefing-box').className = 'briefing-box';
+    document.getElementById('briefing-box').textContent = '';
+    typeText('briefing-box', briefingText);
+
+    // Update timestamp
+    const now = new Date();
+    document.getElementById('updated-dot').className = 'updated-dot live';
+    document.getElementById('updated-text').textContent = 'Updated ' + now.toLocaleTimeString('en-IL', { hour: '2-digit', minute: '2-digit' });
+    setStatus('live', 'Live · ' + now.toLocaleTimeString('en-IL', { hour: '2-digit', minute: '2-digit' }));
+
+    briefingData = classData;
+
+  } catch (err) {
+    console.error(err);
+    document.getElementById('briefing-box').className = 'briefing-box';
+    document.getElementById('briefing-box').textContent = '⚠ Could not load live data: ' + err.message + '\n\nCheck connection and tap Refresh.';
+    setStatus('error', 'Error');
+  }
+
+  isBriefing = false;
+  document.getElementById('refresh-btn').disabled = false;
+}
+
+function buildBriefing(safe, nogo, data) {
+  const date = new Date().toLocaleDateString('en-IL', { weekday: 'long', day: 'numeric', month: 'long' });
+  let text = `${date}\n\n`;
+  if (nogo.length) {
+    text += `🔴 Avoid: ${nogo.join(', ')}.\n\n`;
+  }
+  if (safe.length) {
+    text += `✅ Clear for activity: ${safe.join(', ')}.\n\n`;
+  }
+  const neutral = REGIONS.filter(r => r.class === 'neutral').map(r => r.name);
+  if (neutral.length) {
+    text += `⚪ Exercise caution: ${neutral.join(', ')}.`;
+  }
+  return text;
+}
+
+function typeText(elId, text) {
+  const el = document.getElementById(elId);
+  let i = 0;
+  const iv = setInterval(() => {
+    i = Math.min(i + 4, text.length);
+    el.textContent = text.slice(0, i);
+    if (i >= text.length) clearInterval(iv);
+  }, 12);
+}
+
+// ─── Login ───────────────────────────────────────────────────────────────────
+const ACCESS_KEY = 'Admin';
+const SESSION_KEY = 'safemap_auth';
+
+function attemptLogin() {
+  const input = document.getElementById('login-input');
+  const error = document.getElementById('login-error');
+  const val   = input.value.trim();
+
+  if (val === ACCESS_KEY) {
+    // Store session so refresh doesn't re-prompt
+    sessionStorage.setItem(SESSION_KEY, '1');
+    const gate = document.getElementById('login-gate');
+    gate.classList.add('hidden');
+    setTimeout(() => gate.remove(), 450);
+    bootApp();
+  } else {
+    input.value = '';
+    input.classList.add('error');
+    error.classList.add('show');
+    setTimeout(() => {
+      input.classList.remove('error');
+      error.classList.remove('show');
+      input.focus();
+    }, 1200);
+  }
+}
+
+// ─── Boot ────────────────────────────────────────────────────────────────────
+function setLoadProgress(pct, label) {
+  document.getElementById('load-bar').style.width = pct + '%';
+  document.getElementById('load-sub').textContent = label;
+}
+
+function bootApp() {
+  const overlay = document.getElementById('loading-overlay');
+  if (!overlay) return; // already booted
+
+  setLoadProgress(20, 'Loading map…');
+  initMap();
+
+  setLoadProgress(50, 'Map ready · Fetching alert data…');
+  setTimeout(async () => {
+    setLoadProgress(70, 'Analyzing regions…');
+    setLoadProgress(100, 'Ready');
+    setTimeout(() => {
+      overlay.classList.add('hidden');
+      setTimeout(() => overlay.remove(), 500);
+    }, 300);
+    setTimeout(() => runBriefing(), 400);
+  }, 600);
+}
+
+window.addEventListener('load', () => {
+  // Auto-pass gate if already authenticated this session
+  if (sessionStorage.getItem(SESSION_KEY)) {
+    const gate = document.getElementById('login-gate');
+    if (gate) gate.remove();
+    bootApp();
+  } else {
+    // Focus input for quick typing on desktop
+    setTimeout(() => document.getElementById('login-input')?.focus(), 300);
+  }
+});
+</script>
+</body>
+</html>
