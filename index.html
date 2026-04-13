@@ -1036,11 +1036,10 @@ Return ONLY the JSON object as specified.`;
       const resp = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': CLAUDE_KEY,
-          'anthropic-version': '2023-06-01',
           'anthropic-dangerous-direct-browser-access': 'true',
-          'Authorization': 'Bearer ' + CLAUDE_KEY
+          'anthropic-version': '2023-06-01',
+          'x-api-key': CLAUDE_KEY,
+          'content-type': 'application/json'
         },
         body: JSON.stringify({
           model: MODEL,
@@ -1053,7 +1052,8 @@ Return ONLY the JSON object as specified.`;
 
       if (!resp.ok) {
         const e = await resp.json().catch(() => ({}));
-        throw new Error(e.error?.message || `HTTP ${resp.status}`);
+        const detail = JSON.stringify(e);
+        throw new Error((e.error?.message || `HTTP ${resp.status}`) + ' | ' + detail);
       }
 
       const data = await resp.json();
